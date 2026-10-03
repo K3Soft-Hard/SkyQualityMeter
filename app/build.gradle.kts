@@ -13,8 +13,8 @@ android {
         applicationId = "com.pk3ju.skyqualitymeter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "10.1.0"
+        versionCode = 18
+        versionName = "12.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }

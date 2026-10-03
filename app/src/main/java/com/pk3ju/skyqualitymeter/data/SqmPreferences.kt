@@ -23,7 +23,16 @@ class SqmPreferencesManager(private val context: Context) {
         
         val DEV_MODE_UNLOCKED = booleanPreferencesKey("dev_mode_unlocked")
         val BETA_CAPTURE_UI = booleanPreferencesKey("beta_capture_ui")
+        val BETA_LIGHT_METER_UI = booleanPreferencesKey("beta_light_meter_ui")
+        val BACKGROUND_RECORDING_ENABLED = booleanPreferencesKey("background_recording_enabled")
+        val VIBRATION_FEEDBACK_ENABLED = booleanPreferencesKey("vibration_feedback_enabled")
         val AUTO_NAME_CAPTURE = booleanPreferencesKey("auto_name_capture")
+        val BORTLE_DECIMALS = intPreferencesKey("bortle_decimals")
+
+        val SHOW_CAPTURE_GRAPHS = booleanPreferencesKey("show_capture_graphs")
+        val SHOW_CAPTURE_KEOGRAM = booleanPreferencesKey("show_capture_keogram")
+        val IS_NIGHT_VISION_SQUARE = booleanPreferencesKey("is_night_vision_square")
+        val IS_LIGHT_METER_PIXEL_PREVIEW = booleanPreferencesKey("is_light_meter_pixel_preview")
         
         val SERVERS_JSON = stringPreferencesKey("servers_json_v9")
         val SAVED_OBSERVATIONS_JSON = stringPreferencesKey("saved_observations_json_v9")
@@ -39,7 +48,16 @@ class SqmPreferencesManager(private val context: Context) {
     val pollingIntervalMsFlow: Flow<Long> = context.dataStore.data.map { it[POLLING_INTERVAL_MS] ?: 3000L }
     val devModeUnlockedFlow: Flow<Boolean> = context.dataStore.data.map { it[DEV_MODE_UNLOCKED] ?: false }
     val betaCaptureUiFlow: Flow<Boolean> = context.dataStore.data.map { it[BETA_CAPTURE_UI] ?: false }
+    val betaLightMeterUiFlow: Flow<Boolean> = context.dataStore.data.map { it[BETA_LIGHT_METER_UI] ?: true }
+    val backgroundRecordingEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[BACKGROUND_RECORDING_ENABLED] ?: true }
+    val vibrationFeedbackEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[VIBRATION_FEEDBACK_ENABLED] ?: true }
     val autoNameCaptureFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_NAME_CAPTURE] ?: false }
+    val bortleDecimalsFlow: Flow<Int> = context.dataStore.data.map { it[BORTLE_DECIMALS] ?: -1 }
+
+    val showCaptureGraphsFlow: Flow<Boolean> = context.dataStore.data.map { it[SHOW_CAPTURE_GRAPHS] ?: true }
+    val showCaptureKeogramFlow: Flow<Boolean> = context.dataStore.data.map { it[SHOW_CAPTURE_KEOGRAM] ?: false }
+    val isNightVisionSquareFlow: Flow<Boolean> = context.dataStore.data.map { it[IS_NIGHT_VISION_SQUARE] ?: false }
+    val isLightMeterPixelPreviewFlow: Flow<Boolean> = context.dataStore.data.map { it[IS_LIGHT_METER_PIXEL_PREVIEW] ?: false }
     
     val serversFlow: Flow<List<ServerProfile>> = context.dataStore.data.map { prefs ->
         val jsonString = prefs[SERVERS_JSON] ?: "[]"

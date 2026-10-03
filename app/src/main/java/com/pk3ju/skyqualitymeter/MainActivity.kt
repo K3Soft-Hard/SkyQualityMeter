@@ -1,11 +1,17 @@
 package com.pk3ju.skyqualitymeter
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -33,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -45,26 +52,46 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
         setContent {
             val state by viewModel.uiState.collectAsState()
+            val context = LocalContext.current
+
+            val notifPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { isGranted ->
+                if (!isGranted) {
+                    Toast.makeText(context, "Notification permission is required for background recording notifications", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            }
             
             val view = LocalView.current
-            val window = window
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            LaunchedEffect(state.isFullscreen) {
+            val localInsetsController = remember(view) { WindowCompat.getInsetsController(window, view) }
+            SideEffect {
                 if (state.isFullscreen) {
-                    insetsController.hide(WindowInsetsCompat.Type.systemBars())
-                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    localInsetsController.hide(WindowInsetsCompat.Type.systemBars())
                 } else {
-                    insetsController.show(WindowInsetsCompat.Type.systemBars())
+                    localInsetsController.show(WindowInsetsCompat.Type.systemBars())
                 }
             }
 
             val colors = if (state.isAstroRedMode) AstroRed else if (state.isDarkTheme) StandardDark else StandardLight
 
             if (state.activeTab == NavigationTab.WELCOME) {
-                Scaffold(containerColor = colors.bg, modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
-                    WelcomeScreen(colors, viewModel::finishWelcome)
+                Scaffold(containerColor = colors.bg, modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) { padding ->
+                    Box(modifier = Modifier.padding(padding)) {
+                        WelcomeScreen(colors, viewModel::finishWelcome)
+                    }
                 }
                 return@setContent
             }
@@ -72,13 +99,21 @@ class MainActivity : ComponentActivity() {
             Scaffold(
                 containerColor = colors.bg,
                 modifier = if(state.isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars),
-                topBar = { TopBar(state, colors, { viewModel.setAstroRedMode(!state.isAstroRedMode) }, viewModel::startPolling, viewModel::setActiveServer) },
-                bottomBar = { BottomNav(state.activeTab, state.betaCaptureUiEnabled, colors, state.textScale, viewModel::setActiveTab) }
+                topBar = { TopBar(state, colors, { triggerHaptic(context, state.vibrationFeedbackEnabled, HapticType.LIGHT_TAP); viewModel.setAstroRedMode(!state.isAstroRedMode) }, viewModel::startPolling, viewModel::setActiveServer) },
+                bottomBar = { BottomNav(state.activeTab, state.betaCaptureUiEnabled, colors, state.textScale, state.vibrationFeedbackEnabled, viewModel::setActiveTab) }
             ) { padding ->
                 Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                     AnimatedContent(targetState = state.activeTab, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) }, label = "tab") { tab ->
                         when (tab) {
-                            NavigationTab.OBSERVATION -> ObservationScreen(state, colors, { name -> viewModel.saveCurrentObservation(name) }, viewModel::setActiveServer, viewModel::startPolling)
+                            NavigationTab.OBSERVATION -> ObservationScreen(
+                                state = state,
+                                colors = colors,
+                                onSaveRecord = { name -> viewModel.saveCurrentObservation(name) },
+                                onSwitchServer = viewModel::setActiveServer,
+                                onRetry = viewModel::startPolling,
+                                onPageChange = viewModel::setMainTabPageIndex,
+                                onToggleLightMeterPixel = viewModel::setLightMeterPixelPreview
+                            )
                             NavigationTab.RAW_DATA -> RawDataScreen(state, colors)
                             NavigationTab.CAPTURE -> CaptureScreen(
                                 state = state,
@@ -87,18 +122,22 @@ class MainActivity : ComponentActivity() {
                                 onSetVideoInterval = viewModel::setVideoInterval,
                                 onSetTimelapseInterval = viewModel::setTimelapseInterval,
                                 onToggleAutoName = viewModel::setAutoNameCapture,
-                                onStartRecord = viewModel::startRecording,
-                                onStopRecord = viewModel::stopRecording,
-                                onSave = viewModel::saveCurrentObservation
+                                onStartRecord = { ctx -> viewModel.startRecording(ctx) },
+                                onStopRecord = { ctx -> viewModel.stopRecording(ctx) },
+                                onSave = viewModel::saveCurrentObservation,
+                                onToggleGraphs = viewModel::setCaptureGraphsVisible,
+                                onToggleKeogram = viewModel::setCaptureKeogramVisible,
+                                onToggleNightVisionSquare = viewModel::setNightVisionSquare
                             )
-                            NavigationTab.GRAPH -> GraphScreen(state, colors, viewModel::exportTelemetryToCsv)
+                            NavigationTab.DATA -> DataScreen(state, colors, viewModel::exportTelemetryToCsv)
                             NavigationTab.RECORDS -> RecordsScreen(
                                 state = state,
                                 colors = colors,
                                 onDelete = viewModel::removeObservation,
                                 onOpenReport = viewModel::openReport,
                                 onImport = viewModel::importObservation,
-                                onToggleFavorite = viewModel::toggleFavorite
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onRenameObservation = viewModel::renameObservation
                             )
                             NavigationTab.SETTINGS -> SettingsScreen(
                                 state = state,
@@ -108,6 +147,7 @@ class MainActivity : ComponentActivity() {
                                 onRemoveServer = viewModel::removeServer,
                                 onSwitchServer = viewModel::setActiveServer,
                                 onUpdatePref = viewModel::updatePreferences,
+                                onSetBortleDecimals = viewModel::setBortleDecimals,
                                 onEnableDebug = viewModel::enableDebugMode,
                                 onDevClick = { 
                                     devClicks++
@@ -148,6 +188,7 @@ val AstroRed = AstroColors(Color(0xFF000000), Color(0xFF080000), Color(0xFF12000
 
 @Composable
 fun TopBar(state: SqmUiState, colors: AstroColors, onToggleRed: () -> Unit, onRefresh: () -> Unit, onSwitchServer: (String) -> Unit) {
+    val context = LocalContext.current
     val s = state.textScale
     var showServerDialog by remember { mutableStateOf(false) }
     var showWebViewDialog by remember { mutableStateOf(false) }
@@ -157,7 +198,10 @@ fun TopBar(state: SqmUiState, colors: AstroColors, onToggleRed: () -> Unit, onRe
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(
                 modifier = Modifier
-                    .clickable { showServerDialog = true }
+                    .clickable {
+                        triggerHaptic(context, state.vibrationFeedbackEnabled, HapticType.MEDIUM_CLICK)
+                        showServerDialog = true
+                    }
                     .background(colors.card, RoundedCornerShape(6.dp))
                     .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(6.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -186,7 +230,7 @@ fun TopBar(state: SqmUiState, colors: AstroColors, onToggleRed: () -> Unit, onRe
             Button(
                 onClick = onToggleRed,
                 colors = ButtonDefaults.buttonColors(containerColor = colors.card),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+                border = BorderStroke(1.dp, colors.border)
             ) {
                 Text(if (state.isAstroRedMode) "WHITE ($themeName)" else "650nm RED", color = colors.accent, fontSize = (9 * s).sp, fontFamily = FontFamily.Monospace)
             }
@@ -194,12 +238,18 @@ fun TopBar(state: SqmUiState, colors: AstroColors, onToggleRed: () -> Unit, onRe
             Spacer(modifier = Modifier.width(4.dp))
             
             if (webUrl.length > 3) {
-                IconButton(onClick = { showWebViewDialog = true }) {
+                IconButton(onClick = {
+                    triggerHaptic(context, state.vibrationFeedbackEnabled, HapticType.LIGHT_TAP)
+                    showWebViewDialog = true
+                }) {
                     Icon(Icons.Default.Public, "Website", tint = colors.accent)
                 }
             }
             
-            IconButton(onClick = onRefresh) {
+            IconButton(onClick = {
+                triggerHaptic(context, state.vibrationFeedbackEnabled, HapticType.LIGHT_TAP)
+                onRefresh()
+            }) {
                 Icon(Icons.Default.Refresh, "Refresh", tint = colors.secondaryText)
             }
         }
@@ -263,6 +313,7 @@ fun ServerPickerCenterDialog(
     onDismiss: () -> Unit,
     onSelect: (String) -> Unit
 ) {
+    val context = LocalContext.current
     Dialog(onDismissRequest = onDismiss) {
         Card(
             colors = CardDefaults.cardColors(containerColor = colors.surface),
@@ -308,7 +359,10 @@ fun ServerPickerCenterDialog(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelect(server.id) }
+                                .clickable {
+                                    triggerHaptic(context, true, HapticType.MEDIUM_CLICK)
+                                    onSelect(server.id)
+                                }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -339,16 +393,35 @@ fun ServerPickerCenterDialog(
 }
 
 @Composable
-fun BottomNav(selected: NavigationTab, isBetaActive: Boolean, colors: AstroColors, scale: Float, onSelect: (NavigationTab) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().background(colors.surface).border(androidx.compose.foundation.BorderStroke(1.dp, colors.border)).padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-        NavItem(Icons.Default.Visibility, "Main", selected == NavigationTab.OBSERVATION, colors, scale) { onSelect(NavigationTab.OBSERVATION) }
-        NavItem(Icons.Default.Code, "Raw", selected == NavigationTab.RAW_DATA, colors, scale) { onSelect(NavigationTab.RAW_DATA) }
-        if (isBetaActive) {
-            NavItem(Icons.Default.Camera, "Capture", selected == NavigationTab.CAPTURE, colors, scale) { onSelect(NavigationTab.CAPTURE) }
+fun BottomNav(selected: NavigationTab, isBetaActive: Boolean, colors: AstroColors, scale: Float, vibEnabled: Boolean, onSelect: (NavigationTab) -> Unit) {
+    val context = LocalContext.current
+    Row(modifier = Modifier.fillMaxWidth().background(colors.surface).border(BorderStroke(1.dp, colors.border)).padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        NavItem(Icons.Default.Visibility, "Main", selected == NavigationTab.OBSERVATION, colors, scale) {
+            triggerHaptic(context, vibEnabled, HapticType.LIGHT_TAP)
+            onSelect(NavigationTab.OBSERVATION)
         }
-        NavItem(Icons.Default.Assessment, "Graph", selected == NavigationTab.GRAPH, colors, scale) { onSelect(NavigationTab.GRAPH) }
-        NavItem(Icons.Default.Star, "Records", selected == NavigationTab.RECORDS, colors, scale) { onSelect(NavigationTab.RECORDS) }
-        NavItem(Icons.Default.Settings, "Setup", selected == NavigationTab.SETTINGS, colors, scale) { onSelect(NavigationTab.SETTINGS) }
+        NavItem(Icons.Default.Code, "Raw", selected == NavigationTab.RAW_DATA, colors, scale) {
+            triggerHaptic(context, vibEnabled, HapticType.LIGHT_TAP)
+            onSelect(NavigationTab.RAW_DATA)
+        }
+        if (isBetaActive) {
+            NavItem(Icons.Default.Camera, "Capture", selected == NavigationTab.CAPTURE, colors, scale) {
+                triggerHaptic(context, vibEnabled, HapticType.LIGHT_TAP)
+                onSelect(NavigationTab.CAPTURE)
+            }
+        }
+        NavItem(Icons.Default.Assessment, "Data", selected == NavigationTab.DATA, colors, scale) {
+            triggerHaptic(context, vibEnabled, HapticType.LIGHT_TAP)
+            onSelect(NavigationTab.DATA)
+        }
+        NavItem(Icons.Default.Star, "Records", selected == NavigationTab.RECORDS, colors, scale) {
+            triggerHaptic(context, vibEnabled, HapticType.LIGHT_TAP)
+            onSelect(NavigationTab.RECORDS)
+        }
+        NavItem(Icons.Default.Settings, "Setup", selected == NavigationTab.SETTINGS, colors, scale) {
+            triggerHaptic(context, vibEnabled, HapticType.LIGHT_TAP)
+            onSelect(NavigationTab.SETTINGS)
+        }
     }
 }
 
