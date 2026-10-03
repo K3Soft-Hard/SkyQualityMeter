@@ -8,6 +8,28 @@ An advanced, native Android application designed for astronomers, astrophotograp
 
 ---
 
+## Example Screenshots
+
+### Dark Theme
+
+| Main | Recordings | Recording |
+| :---: | :---: | :---: |
+| <img src="Screenshots/dark_main.jpg" width="260" alt="Dark Main" /> | <img src="Screenshots/dark_recordings.jpg" width="260" alt="Dark Recordings" /> | <img src="Screenshots/dark_recording.jpg" width="260" alt="Dark Recording" /> |
+
+| Light Meter | Settings |
+| :---: | :---: |
+| <img src="Screenshots/dark_light_meter.jpg" width="260" alt="Dark Light Meter" /> | <img src="Screenshots/dark_settings.jpg" width="260" alt="Dark Settings" /> |
+
+---
+
+### Night Theme
+
+| Main | Recordings | Data |
+| :---: | :---: | :---: |
+| <img src="Screenshots/night_main.jpg" width="260" alt="Night Main" /> | <img src="Screenshots/night_recordings.jpg" width="260" alt="Night Recordings" /> | <img src="Screenshots/night_data.jpg" width="260" alt="Night Data" /> |
+
+---
+
 ## ✨ Features List
 
 ### 🔭 1. Live Astronomy SQM Telemetry
@@ -58,7 +80,7 @@ An advanced, native Android application designed for astronomers, astrophotograp
 
 ## 🛰️ Sensor Endpoint & Mock JSON Specification
 
-The application communicates with sensors over local Wi-Fi or LAN via plain HTTP JSON endpoints. You can also paste this JSON into **Developer Tools $\rightarrow$ Mock Telemetry** to test the app without hardware.
+The application communicates with sensors over local Wi-Fi or LAN via plain HTTP JSON endpoints. You can also paste this JSON into **Developer Tools → Mock Telemetry** to test the app without hardware.
 
 ### Expected JSON Payload Format
 ```json
